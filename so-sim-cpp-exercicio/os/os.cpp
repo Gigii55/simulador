@@ -12,116 +12,39 @@
 #include "os-lib.h"
 #include "process.h"
 #include "keyboard.h"
+#include "os-memory.h"
+#include <fstream>
 
 namespace OS {
-	
-Arch::Cpu *cpu;
-Keyboard* meu_teclado;
-
-// meus frames da memoria fissica
-const int NUM_FRAMES = Config::phys_mem_size_words / Config::page_size;
-
-bool frame_esta_ocupado[NUM_FRAMES]; 
-
-int pmm_alocar_frame (){
-
-	for (int i = 0; i < NUM_FRAMES; i++) {
-
-		if (frame_esta_ocupado[i] == false) {
-			
-			frame_esta_ocupado[i] = true;
-			return i;
-		}
-	}
-	
-	return -1;
-}
 
 Process processo_idle;
 Process *processo_atual;
+Process processo_programa;
 
-void carregar_processo_na_memoria (Process *proc)
+Arch::Cpu *cpu;
+Keyboard* meu_teclado;
+
+//-----------------------------~
+
+
+void boot(Arch::Cpu *cpu)
 {
-	int tamanho_do_programa = proc->image.size();
+    OS::cpu = cpu;
 
-	int qtd_paginas = (tamanho_do_programa + Config::page_size - 1) >> Config::page_size_bits;
+    // prepara o idle
+    processo_idle.process_id = 0;
+    processo_idle.image = Lib::load_from_disk_to_16bit_buffer("archieves/idle.bin");
 
-	// repete uma vez PRA CADA PAGINA que o programa precisa
-	for (int numero_da_pagina = 0; numero_da_pagina < qtd_paginas; numero_da_pagina++) {
+    carregar_processo_na_memoria(&processo_idle);
+    cpu->set_vmem_mode(VmemMode::Paging);
 
-		int inicio_da_pagina = numero_da_pagina << Config::page_size_bits;
+	trocar_processo(&processo_idle);
 
-		int frame = pmm_alocar_frame();
+    meu_teclado = new Keyboard(cpu);
 
-		if (frame == -1) {
-			terminal_println(cpu, Terminal::Kernel, "acabou a memoria fisica ao carregar o processo!");
-			cpu->turn_off();
-			return;
-		}
-
-		//passsa pro frame fisico
-		for (int i = 0; i < Config::page_size; i++) {
-
-			int endereco_virtual_da_palavra = inicio_da_pagina + i;
-
-			uint16_t valor;
-
-			if (endereco_virtual_da_palavra < tamanho_do_programa) {
-
-				valor = proc->image[endereco_virtual_da_palavra];
-			}
-			else {
-				//preenche com 0 pra n deixar lixo na memoria
-				valor = 0;
-			}
-
-			// aquela mesma tecnica da rua + o n da casa
-			int endereco_fisico = (frame << Config::page_size_bits) + i;
-
-			// ele vai lá no endereco_fisico e grava
-			cpu->pmem_write(endereco_fisico, valor);
-		}
-
-		// agora atualiza a entrada da tabela de paginas dessa pagina
-		PageTableEntry &pte = proc->page_table[numero_da_pagina];
-
-		//QUAL FRAME FISSICO MINHA PAG ESTA
-		pte.set(Arch::Cpu::PteField::PhyFrameID, frame);
-		
-		//MARCA 1 PRADIZER QUE ELA EXISTE
-		pte.set(Arch::Cpu::PteField::Present,1);
-
-		// diz O QUE pode ser feito com ela: ler, escrever, executar
-		pte.set(Arch::Cpu::PteField::Readable,1);
-		pte.set(Arch::Cpu::PteField::Writable,1);
-		pte.set(Arch::Cpu::PteField::Executable,1);
-	}
-}
-
-void boot (Arch::Cpu *cpu)
-
-{
-	OS::cpu = cpu;
-
-	processo_idle.process_id = 0;
-
-	//processo_idle.image = Lib::load_from_disk_to_16bit_buffer("archieves/gpf_test.bin"); //estoura memoria
-	 processo_idle.image = Lib::load_from_disk_to_16bit_buffer("archieves/idle.bin"); 
-	//processo_idle.image = Lib::load_from_disk_to_16bit_buffer("archieves/print2.bin"); //imprime nome
-	//processo_idle.image = Lib::load_from_disk_to_16bit_buffer("archieves/syscall_test.bin"); //imprime numero
-	processo_atual = &processo_idle;
-
-	// carrega o programa inteiro na memoria fisica, ANTES de comecar a rodar
-	carregar_processo_na_memoria(processo_atual);
-
-	cpu->set_page_table(&processo_atual->page_table); //seta minha tabela de pagins
-	cpu->set_vmem_mode(VmemMode::Paging); //liga a paginação
-	
-	meu_teclado = new Keyboard(cpu);
-
-	terminal_println(cpu, Terminal::Command, "Type commands here");
-	terminal_println(cpu, Terminal::App, "Apps output here");
-	terminal_println(cpu, Terminal::Kernel, "Kernel output here");
+    terminal_println(cpu, Terminal::Command, "Type commands here");
+    terminal_println(cpu, Terminal::App, "Apps output here");
+    terminal_println(cpu, Terminal::Kernel, "Kernel output here");
 }
 
 void interrupt (InterruptCode interrupt_code)
@@ -130,10 +53,9 @@ void interrupt (InterruptCode interrupt_code)
 
 		CpuException excecao = cpu->get_ref_cpu_exception();
 
-		terminal_println(cpu, Terminal::Kernel, "EXCESAO (", excecao.type, ") no endereco ", excecao.vaddr, "processo ", processo_atual->process_id, " morto");
+		terminal_println(cpu, Terminal::Kernel, "EXCESAO (", excecao.type, ") no endereco ", excecao.vaddr);
 
-		// ""mato"" o processo
-		cpu->set_pc(0);
+		matar_processo_atual();
 	}
 
 	else if (interrupt_code == InterruptCode::Keyboard) {
@@ -147,9 +69,7 @@ void syscall () {
 	uint16_t codigo = cpu->get_gpr(0);
 
 	if (codigo == 0) {
-
-		terminal_println(cpu, Terminal::Kernel, "processo ", processo_atual->process_id, " fechado");
-		cpu->set_pc(0);
+		matar_processo_atual();
 		
 		}
 
@@ -170,6 +90,13 @@ void syscall () {
 		  //descobrir em qual frame a página está
 			PageTableEntry &pte = processo_atual->page_table[pagina];
 
+				// checagem do endereço virtual
+				if (pte[Arch::Cpu::PteField::Present] == 0 || pte[Arch::Cpu::PteField::Readable] == 0) {
+					terminal_println(cpu,Terminal::Kernel,"ERRO: endereco virtual invalido");
+					matar_processo_atual();
+					return;
+				}
+
 			uint16_t frame = pte[Arch::Cpu::PteField::PhyFrameID];
 
 			int endereco_fisico = (frame << Config::page_size_bits) + offset;
@@ -179,7 +106,7 @@ void syscall () {
 			if (caractere != 0)
 				texto += (char) caractere;
 
-			endereco_virtual++;
+			endereco_virtual++; 
 		} 
 		
 		while (caractere != 0);

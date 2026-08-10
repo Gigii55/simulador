@@ -32,6 +32,10 @@ void interrupt (const InterruptCode interrupt);
 
 void syscall ();
 
+void carregar_programa(std::string nome);
+
+void matar_processo_atual();
+
 // ---------------------------------------
 
 } // end namespace
