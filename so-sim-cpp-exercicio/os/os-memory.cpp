@@ -1,7 +1,6 @@
 #include "os-memory.h"
 #include "os-lib.h"
 #include "process.h"
-
 #include "../arch/cpu.h"
 #include "../arch/arch.h"
 #include "../arch/terminal.h"
@@ -60,6 +59,8 @@ void carregar_processo_na_memoria (Process *proc){
 			return;
 		}
 
+		proc->frames_alocados.push_back(frame);
+
 		//passsa pro frame fisico
 			for (int i = 0; i < Config::page_size; i++) {
 
@@ -83,7 +84,6 @@ void carregar_processo_na_memoria (Process *proc){
 				cpu->pmem_write(endereco_fisico, valor);
 			}
 
-
 		// agora atualiza a entrada da tabela de paginas dessa pagina
 		PageTableEntry &pte = proc->page_table[numero_da_pagina];
 
@@ -99,6 +99,14 @@ void carregar_processo_na_memoria (Process *proc){
 		pte.set(Arch::Cpu::PteField::Executable,1);
 	}
 
+}
+
+void liberar_memoria_processo (Process *proc) {
+	for (int frame : proc->frames_alocados) {
+		pmm_liberar_frame(frame);
+	}
+
+	proc->frames_alocados.clear();
 }
 
 }

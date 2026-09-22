@@ -5,6 +5,7 @@
 #include "../arch/terminal.h"
 #include "../lib.h"
 #include "../config.h"
+#include <fstream>
 
 namespace OS {
 
@@ -22,32 +23,18 @@ void matar_processo_atual() {
         return;
     }
 
-    int tamanho_do_programa = processo_atual->image.size();
+    terminal_println(cpu,Terminal::Kernel,"processo ",processo_atual->process_id," (", processo_atual->nome_binario, ") morto, liberando ",
+    processo_atual->frames_alocados.size() * Config::page_size, " palavras de memoria");
 
-    // minha "divisao"
-    int qtd_paginas = (tamanho_do_programa + Config::page_size - 1)>> Config::page_size_bits;
-
-    // libera os frames usados pelo processo
-    for (int pagina = 0; pagina < qtd_paginas; pagina++) {
-
-        // pego a entrada da tabela de pag
-        PageTableEntry &pte = processo_atual->page_table[pagina];
-
-        // descubro o frame
-        uint16_t frame = pte[Arch::Cpu::PteField::PhyFrameID];
-
-        pmm_liberar_frame(frame);
-
-        pte.set(Arch::Cpu::PteField::Present,0);
-    }
-
-    terminal_println(cpu,Terminal::Kernel,"processo ",processo_atual->process_id," morto");
-
+    liberar_memoria_processo(processo_atual);
     trocar_processo(&processo_idle);
 } 
 
 
+
 void carregar_programa(std::string nome) {
+
+ 
 
     if (processo_atual != &processo_idle) {
         terminal_println(cpu, Terminal::Kernel,"ja tem um programa rodando");
@@ -73,20 +60,36 @@ void carregar_programa(std::string nome) {
     processo_programa.process_id = 1;
 
     processo_programa.image = Lib::load_from_disk_to_16bit_buffer(caminho);
+    processo_programa.nome_binario = nome; 
+    processo_programa.estado = EstadoProcesso::Pronto; 
+
+    processo_programa.pc_salvo = 1;
+    processo_programa.gprs_salvos = {};
+    processo_programa.page_table = {};
 
     carregar_processo_na_memoria(&processo_programa);
 
     trocar_processo(&processo_programa);
+    
+    terminal_println(cpu, Terminal::Kernel, "processo ", processo_programa.process_id, " (", processo_programa.nome_binario, ") carregado, usando ",
+    processo_programa.frames_alocados.size() * Config::page_size, " palavras de memoria");
 }
-
 
 void trocar_processo(Process *processo) {
+    if (processo_atual != nullptr) {
+        processo_atual->pc_salvo = cpu->get_pc();
+        for (uint32_t i = 0; i < Config::nregs; i++)
+            processo_atual->gprs_salvos[i] = cpu->get_gpr(i);
+
+        if (processo_atual->estado == EstadoProcesso::Executando)
+            processo_atual->estado = EstadoProcesso::Pronto;
+    }
 
     processo_atual = processo;
-
+    processo->estado = EstadoProcesso::Executando;
     cpu->set_page_table(&processo->page_table);
-
-    cpu->set_pc(1);
+    cpu->set_pc(processo->pc_salvo);
+    for (uint32_t i = 0; i < Config::nregs; i++)
+        cpu->set_gpr(i, processo->gprs_salvos[i]);
 }
-
 }
