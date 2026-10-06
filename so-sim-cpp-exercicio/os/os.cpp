@@ -14,16 +14,27 @@
 #include "keyboard.h"
 #include "os-memory.h"
 #include <fstream>
+#include <array>
 
 namespace OS {
 
 Process processo_idle;
 Process *processo_atual;
-Process processo_programa;
 
 Arch::Cpu *cpu;
 Keyboard* meu_teclado;
 
+std::array<Process, MAX_PROCESSOS> tabela_processos;
+int proximo_pid = 1;
+
+Process *alocar_entrada_processo () {
+
+    for (int i = 0; i < MAX_PROCESSOS; i++) {
+        if (tabela_processos[i].estado == EstadoProcesso::Livre)
+            return &tabela_processos[i];
+    }
+    return nullptr;
+}
 //-----------------------------~
 
 
@@ -81,11 +92,11 @@ void syscall () {
 
 	do {
 		//   37 ÷ 16 = 2
-		  int pagina = endereco_virtual >> Config::page_size_bits;
+		int pagina = endereco_virtual >> Config::page_size_bits;
 		//    2 × 16 = 32
-		  int inicio_pagina = pagina << Config::page_size_bits;
+		int inicio_pagina = pagina << Config::page_size_bits;
 		//     37 - 32 = 5
-		  int offset = endereco_virtual - inicio_pagina;
+		int offset = endereco_virtual - inicio_pagina;
 
 		  //descobrir em qual frame a página está
 			PageTableEntry &pte = processo_atual->page_table[pagina];
@@ -106,14 +117,14 @@ void syscall () {
 			if (caractere != 0)
 				texto += (char) caractere;
 
-			endereco_virtual++; 
-		} 
+			endereco_virtual++;
+		}
 		
 		while (caractere != 0);
 
 		terminal_print_str(cpu, Terminal::App, texto);
 
-		}	
+		}
 			//quebra de linha
 			else if (codigo == 2) {
 				terminal_print_str(cpu, Terminal::App, "\n");

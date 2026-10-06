@@ -41,12 +41,17 @@ void Keyboard::processar_tecla() {
             OS::matar_processo_atual();
         }
 
+		else if (buffer_teclado == "listar") {
+    	OS::listar_processos();
+		}
+
 		else if (buffer_teclado.substr(0, 9) == "carregar ") {
 
 			std::string nome = buffer_teclado.substr(9);
 
 			OS::carregar_programa(nome);
 		}
+		
 
 		buffer_teclado = ""; 
 	} 

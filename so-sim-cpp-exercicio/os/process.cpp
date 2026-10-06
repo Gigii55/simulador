@@ -11,10 +11,32 @@ namespace OS {
 
 extern Process processo_idle;
 extern Process *processo_atual;
-extern Process processo_programa;
+
+extern std::array<Process, 4> tabela_processos;
+extern int proximo_pid;
 
 extern Arch::Cpu *cpu;
+Process *alocar_entrada_processo();
 
+void listar_processos () {
+
+    terminal_println(cpu, Terminal::Kernel, "--- processos ---");
+
+    // idle primeiro, ele nao esta na tabela
+    terminal_println(cpu, Terminal::Kernel, "pid 0 (idle) - memoria: ",
+        processo_idle.frames_alocados.size() * Config::page_size, " palavras");
+
+    for (int i = 0; i < MAX_PROCESSOS; i++) {
+
+        if (tabela_processos[i].estado == EstadoProcesso::Livre)
+            continue; // pula vaga vazia
+
+        terminal_println(cpu, Terminal::Kernel,
+            "pid ", tabela_processos[i].process_id,
+            " (", tabela_processos[i].nome_binario, ") - memoria: ",
+            tabela_processos[i].frames_alocados.size() * Config::page_size, " palavras");
+    }
+}
 
 void matar_processo_atual() {
 
@@ -27,19 +49,11 @@ void matar_processo_atual() {
     processo_atual->frames_alocados.size() * Config::page_size, " palavras de memoria");
 
     liberar_memoria_processo(processo_atual);
+    processo_atual->estado = EstadoProcesso::Livre;
     trocar_processo(&processo_idle);
-} 
-
-
+}
 
 void carregar_programa(std::string nome) {
-
- 
-
-    if (processo_atual != &processo_idle) {
-        terminal_println(cpu, Terminal::Kernel,"ja tem um programa rodando");
-        return;
-    }
 
     if (nome.empty()) {
         terminal_println(cpu, Terminal::Kernel,"ERRO: informe o nome do arquivo!");
@@ -57,26 +71,31 @@ void carregar_programa(std::string nome) {
 
     arquivo.close();
 
-    processo_programa.process_id = 1;
+   Process *novo = alocar_entrada_processo();
 
-    processo_programa.image = Lib::load_from_disk_to_16bit_buffer(caminho);
-    processo_programa.nome_binario = nome; 
-    processo_programa.estado = EstadoProcesso::Pronto; 
+    if (novo == nullptr) {
+    terminal_println(cpu, Terminal::Kernel, "ERRO: tabela de processos cheia!");
+    return;
+    }
 
-    processo_programa.pc_salvo = 1;
-    processo_programa.gprs_salvos = {};
-    processo_programa.page_table = {};
+    novo->process_id = proximo_pid++;
+    novo->image = Lib::load_from_disk_to_16bit_buffer(caminho);
+    novo->nome_binario = nome;
+    novo->estado = EstadoProcesso::Pronto;
 
-    carregar_processo_na_memoria(&processo_programa);
+    novo->pc_salvo = 1;
+    novo->gprs_salvos = {};
+    novo->page_table = {};
 
-    trocar_processo(&processo_programa);
+    carregar_processo_na_memoria(novo);
+    trocar_processo(novo);
     
-    terminal_println(cpu, Terminal::Kernel, "processo ", processo_programa.process_id, " (", processo_programa.nome_binario, ") carregado, usando ",
-    processo_programa.frames_alocados.size() * Config::page_size, " palavras de memoria");
+terminal_println(cpu, Terminal::Kernel, "processo ", novo->process_id, " (", novo->nome_binario, ") carregado, usando ",
+    novo->frames_alocados.size() * Config::page_size, " palavras de memoria");
 }
 
 void trocar_processo(Process *processo) {
-    if (processo_atual != nullptr) {
+    if (processo_atual != nullptr) {//mandar aviso
         processo_atual->pc_salvo = cpu->get_pc();
         for (uint32_t i = 0; i < Config::nregs; i++)
             processo_atual->gprs_salvos[i] = cpu->get_gpr(i);
@@ -84,7 +103,7 @@ void trocar_processo(Process *processo) {
         if (processo_atual->estado == EstadoProcesso::Executando)
             processo_atual->estado = EstadoProcesso::Pronto;
     }
-
+//prefirir fazer multitarefa do que alocação dinamica
     processo_atual = processo;
     processo->estado = EstadoProcesso::Executando;
     cpu->set_page_table(&processo->page_table);

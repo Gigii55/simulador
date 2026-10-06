@@ -36,6 +36,8 @@ void carregar_programa(std::string nome);
 
 void matar_processo_atual();
 
+void listar_processos();
+
 // ---------------------------------------
 
 } // end namespace
