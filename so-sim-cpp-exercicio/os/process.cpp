@@ -14,7 +14,7 @@ extern Process *processo_atual;
 extern Process processo_programa;
 
 extern Arch::Cpu *cpu;
-
+//pra habilitar o commit lkk
 
 void matar_processo_atual() {
 
