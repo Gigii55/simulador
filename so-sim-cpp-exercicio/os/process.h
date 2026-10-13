@@ -44,7 +44,7 @@ enum class EstadoProcesso {
     void carregar_programa(std::string nome);
     void trocar_processo(Process *processo);
     void listar_processos();
-
+    void escalonar();
 
     void matar_processo_atual();
 

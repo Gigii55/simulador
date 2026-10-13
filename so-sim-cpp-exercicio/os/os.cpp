@@ -72,6 +72,10 @@ void interrupt (InterruptCode interrupt_code)
 	else if (interrupt_code == InterruptCode::Keyboard) {
 		meu_teclado->processar_tecla();
 	}
+
+	else if (interrupt_code == InterruptCode::Timer) {
+    escalonar();
+}
 	
 }
 

@@ -21,19 +21,14 @@ Process *alocar_entrada_processo();
 void listar_processos () {
 
     terminal_println(cpu, Terminal::Kernel, "--- processos ---");
-
-    // idle primeiro, ele nao esta na tabela
-    terminal_println(cpu, Terminal::Kernel, "pid 0 (idle) - memoria: ",
-        processo_idle.frames_alocados.size() * Config::page_size, " palavras");
+    terminal_println(cpu, Terminal::Kernel, "pid 0 (idle) - memoria: ", processo_idle.frames_alocados.size() * Config::page_size, " palavras");
 
     for (int i = 0; i < MAX_PROCESSOS; i++) {
 
         if (tabela_processos[i].estado == EstadoProcesso::Livre)
             continue; // pula vaga vazia
 
-        terminal_println(cpu, Terminal::Kernel,
-            "pid ", tabela_processos[i].process_id,
-            " (", tabela_processos[i].nome_binario, ") - memoria: ",
+        terminal_println(cpu, Terminal::Kernel,"pid ", tabela_processos[i].process_id," (", tabela_processos[i].nome_binario, ") - memoria: ",
             tabela_processos[i].frames_alocados.size() * Config::page_size, " palavras");
     }
 }
@@ -90,12 +85,40 @@ void carregar_programa(std::string nome) {
     carregar_processo_na_memoria(novo);
     trocar_processo(novo);
     
-terminal_println(cpu, Terminal::Kernel, "processo ", novo->process_id, " (", novo->nome_binario, ") carregado, usando ",
+    terminal_println(cpu, Terminal::Kernel, "processo ", novo->process_id, " (", novo->nome_binario, ") carregado, usando ",
     novo->frames_alocados.size() * Config::page_size, " palavras de memoria");
 }
 
+void escalonar () {
+    int atual = -1;
+
+    // onde o processo ta na tabela?
+    for (int i = 0; i < MAX_PROCESSOS; i++) {
+        if (&tabela_processos[i] == processo_atual)
+            atual = i;
+    }
+
+    // procura o proximo processo pronto
+    for (int passo = 1; passo <= MAX_PROCESSOS; passo++) {
+
+        int i = atual + passo;
+
+            //voltar pro inicio da tabela se chegar no final
+            if (i >= MAX_PROCESSOS) {
+                i = i - MAX_PROCESSOS;
+            }
+
+        if (tabela_processos[i].estado == EstadoProcesso::Pronto) {
+            trocar_processo(&tabela_processos[i]);
+            return;
+        }
+    }
+
+}
+
 void trocar_processo(Process *processo) {
-    if (processo_atual != nullptr) {//mandar aviso
+    if (processo_atual != nullptr) {
+        
         processo_atual->pc_salvo = cpu->get_pc();
         for (uint32_t i = 0; i < Config::nregs; i++)
             processo_atual->gprs_salvos[i] = cpu->get_gpr(i);
@@ -103,12 +126,12 @@ void trocar_processo(Process *processo) {
         if (processo_atual->estado == EstadoProcesso::Executando)
             processo_atual->estado = EstadoProcesso::Pronto;
     }
-//prefirir fazer multitarefa do que alocação dinamica
+
     processo_atual = processo;
     processo->estado = EstadoProcesso::Executando;
     cpu->set_page_table(&processo->page_table);
     cpu->set_pc(processo->pc_salvo);
     for (uint32_t i = 0; i < Config::nregs; i++)
-        cpu->set_gpr(i, processo->gprs_salvos[i]);
+    cpu->set_gpr(i, processo->gprs_salvos[i]);
 }
 }
