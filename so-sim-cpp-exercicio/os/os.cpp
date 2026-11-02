@@ -62,8 +62,21 @@ void boot(Arch::Cpu *cpu)
     terminal_println(cpu, Terminal::App, "Apps output here");
     terminal_println(cpu, Terminal::Kernel, "Kernel output here");
 }
-void interrupt (InterruptCode interrupt_code)
-{
+
+void configurar_timer(int ciclos) {
+
+    if (ciclos < 1 || ciclos > 65535) {
+        terminal_println(cpu, Terminal::Kernel, "ERRO: numero de ciclos invalido!");
+        return;
+    }
+
+    cpu->write_io(IO_Port::TimerInterruptCycles,static_cast<uint16_t>(ciclos));
+
+    terminal_println(cpu, Terminal::Kernel,"Timer configurado para ", ciclos, " ciclos");
+}
+
+
+void interrupt (InterruptCode interrupt_code) {
 	if (interrupt_code == InterruptCode::CpuException) {
 
 		CpuException excecao = cpu->get_ref_cpu_exception();
@@ -142,6 +155,11 @@ void syscall () {
 					uint16_t numero = cpu->get_gpr(1);
 					terminal_print(cpu, Terminal::App, numero);
 				}
+				//reloogio do simulador (ver tempo decorrido)
+				else if (codigo == 7) {
+    				uint16_t tempo = cpu->read_io(IO_Port::TimerGetTimeSeconds);
+    					cpu->set_gpr(0, tempo);
+}
 	}
 
 }

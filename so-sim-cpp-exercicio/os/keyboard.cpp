@@ -63,6 +63,22 @@ void Keyboard::processar_tecla() {
 			}
 		}
 
+		else if (buffer_teclado.substr(0, 6) == "timer ") {
+
+		std::string texto_ciclos = buffer_teclado.substr(6);
+
+		std::istringstream entrada(texto_ciclos);
+
+		int ciclos;
+		char sobra;
+
+		if (entrada >> ciclos && !(entrada >> sobra)) {
+			OS::configurar_timer(ciclos);
+		}
+		else {
+			OS::terminal_println(cpu, OS::Terminal::Kernel,"ERRO: numero de ciclos invalido!");
+		}
+	}
 		else if (buffer_teclado == "listar") {
     	OS::listar_processos();
 		}

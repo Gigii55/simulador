@@ -39,6 +39,8 @@ void matar_processo_atual();
 
 void listar_processos();
 
+void configurar_timer(int ciclos);
+
 // ---------------------------------------
 
 } // end namespace
