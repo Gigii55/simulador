@@ -12,13 +12,30 @@ namespace OS {
 extern Arch::Cpu *cpu;
 Process *alocar_entrada_processo();
 
+
 void listar_processos() {
+
     terminal_println(cpu, Terminal::Kernel, "--- processos ---");
-    terminal_println(cpu, Terminal::Kernel,"pid 0 (idle) - memoria: ",processo_idle.frames_alocados.size() * Config::page_size," palavras");
+
+    terminal_println(cpu, Terminal::Kernel, "pid 0 (idle) - memoria: ", processo_idle.frames_alocados.size() * Config::page_size,
+    " palavras - estado: ", processo_atual == &processo_idle ? "Executando" : "Pronto");
+
     for (Process &proc : tabela_processos) {
-        terminal_println(cpu, Terminal::Kernel,"pid ", proc.process_id," (", proc.nome_binario,") - memoria: ",proc.frames_alocados.size() * Config::page_size," palavras");
+
+        std::string estado;
+
+        if (proc.estado == EstadoProcesso::Livre)
+            estado = "Livre";
+        else if (proc.estado == EstadoProcesso::Pronto)
+            estado = "Pronto";
+        else if (proc.estado == EstadoProcesso::Executando)
+            estado = "Executando";
+
+        terminal_println(cpu, Terminal::Kernel,"pid ", proc.process_id," (", proc.nome_binario,") - memoria: ",
+            proc.frames_alocados.size() * Config::page_size," palavras - estado: ", estado);
     }
 }
+
 
 void matar_processo_atual() {
 
@@ -45,6 +62,34 @@ void matar_processo_atual() {
             break;
         }
     }
+}
+
+void matar_processo(int pid) {
+
+    if (pid == 0) {
+        terminal_println(cpu, Terminal::Kernel, "ERRO: nao pode matar o idle!");
+        return;
+    }
+
+    for (auto it = tabela_processos.begin();
+         it != tabela_processos.end(); ++it) {
+
+        if (it->process_id == pid) {
+
+            if (&(*it) == processo_atual) {
+                matar_processo_atual();
+                return;
+            }
+
+            liberar_memoria_processo(&(*it));
+            terminal_println(cpu, Terminal::Kernel,"processo ", pid, " finalizado");
+            tabela_processos.erase(it);
+            return;
+        }
+    }
+
+    terminal_println(cpu, Terminal::Kernel,
+        "ERRO: processo ", pid, " nao encontrado!");
 }
 
 Process *carregar_programa(std::string nome) {

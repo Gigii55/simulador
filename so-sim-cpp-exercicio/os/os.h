@@ -8,6 +8,7 @@
 
 #include "../config.h"
 #include "../arch/arch.h"
+#include "process.h"
 
 namespace OS {
 
@@ -32,7 +33,7 @@ void interrupt (const InterruptCode interrupt);
 
 void syscall ();
 
-void carregar_programa(std::string nome);
+Process *carregar_programa(std::string nome);
 
 void matar_processo_atual();
 

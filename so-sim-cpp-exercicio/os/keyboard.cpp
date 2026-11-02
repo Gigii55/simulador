@@ -1,5 +1,9 @@
 #include "Keyboard.h"
 #include "os.h"
+#include "process.h"
+#include "os-lib.h"
+#include "../arch/terminal.h"
+#include <sstream>
 
 Keyboard::Keyboard(Arch::Cpu* ponteiro_cpu) {
 	cpu = ponteiro_cpu;
@@ -40,6 +44,24 @@ void Keyboard::processar_tecla() {
         else if (buffer_teclado == "matar") {
             OS::matar_processo_atual();
         }
+
+		else if (buffer_teclado.substr(0, 6) == "matar ") {
+
+		std::string texto_pid = buffer_teclado.substr(6);
+
+		std::istringstream entrada(texto_pid);
+
+		int pid;
+		char sobra;
+
+		if (entrada >> pid && !(entrada >> sobra)) {
+				OS::matar_processo(pid);
+			}
+
+		else {
+			OS::terminal_println(cpu, OS::Terminal::Kernel,"ERRO: PID invalido!");
+			}
+		}
 
 		else if (buffer_teclado == "listar") {
     	OS::listar_processos();
