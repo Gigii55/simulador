@@ -30,6 +30,8 @@ void listar_processos() {
             estado = "Pronto";
         else if (proc.estado == EstadoProcesso::Executando)
             estado = "Executando";
+        else if (proc.estado == EstadoProcesso::Dormindo)
+            estado = "Dormindo";
 
         terminal_println(cpu, Terminal::Kernel,"pid ", proc.process_id," (", proc.nome_binario,") - memoria: ",
             proc.frames_alocados.size() * Config::page_size," palavras - estado: ", estado);
@@ -182,7 +184,7 @@ void escalonar() {
 }
 
 void trocar_processo(Process *processo) {
-    if (processo_atual != nullptr && processo_atual->estado == EstadoProcesso::Executando) {
+    if (processo_atual != nullptr && (processo_atual->estado == EstadoProcesso::Executando || processo_atual->estado == EstadoProcesso::Dormindo)) {
         processo_atual->pc_salvo = cpu->get_pc();
         for (uint32_t i = 0; i < Config::nregs; i++)
             processo_atual->gprs_salvos[i] = cpu->get_gpr(i);

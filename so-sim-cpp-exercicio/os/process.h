@@ -13,10 +13,15 @@
 enum class EstadoProcesso {
     Livre,
     Pronto,
-    Executando
+    Executando,
+    Dormindo
 };
   
     struct Process {
+
+    uint16_t inicio_sono = 0;
+    uint16_t duracao_sono = 0;
+
     int process_id;
     Arch::Cpu::PageTable page_table;
 

@@ -91,6 +91,21 @@ void interrupt (InterruptCode interrupt_code) {
 	}
 
 	else if (interrupt_code == InterruptCode::Timer) {
+
+    uint16_t agora = cpu->read_io(IO_Port::TimerGetTimeSeconds);
+
+    for (Process &proc : tabela_processos) {
+
+        if (proc.estado == EstadoProcesso::Dormindo) {
+
+            uint16_t tempo_passado = static_cast<uint16_t>(agora - proc.inicio_sono);
+
+            if (tempo_passado >= proc.duracao_sono) {
+                proc.estado = EstadoProcesso::Pronto;
+            }
+        }
+    }
+
     escalonar();
 }
 	
@@ -155,6 +170,21 @@ void syscall () {
 					uint16_t numero = cpu->get_gpr(1);
 					terminal_print(cpu, Terminal::App, numero);
 				}
+					else if (codigo == 6) {
+
+						uint16_t segundos = cpu->get_gpr(1);
+
+						if (segundos == 0)
+							return;
+
+						processo_atual->inicio_sono = cpu->read_io(IO_Port::TimerGetTimeSeconds);
+
+						processo_atual->duracao_sono = segundos;
+						processo_atual->estado = EstadoProcesso::Dormindo;
+
+						trocar_processo(&processo_idle);
+					}
+					
 				//reloogio do simulador (ver tempo decorrido)
 				else if (codigo == 7) {
     				uint16_t tempo = cpu->read_io(IO_Port::TimerGetTimeSeconds);
