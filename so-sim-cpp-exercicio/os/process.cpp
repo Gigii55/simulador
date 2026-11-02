@@ -9,50 +9,49 @@
 
 namespace OS {
 
-extern Process processo_idle;
-extern Process *processo_atual;
-
-extern std::array<Process, 4> tabela_processos;
-extern int proximo_pid;
-
 extern Arch::Cpu *cpu;
 Process *alocar_entrada_processo();
 
-void listar_processos () {
-
+void listar_processos() {
     terminal_println(cpu, Terminal::Kernel, "--- processos ---");
-    terminal_println(cpu, Terminal::Kernel, "pid 0 (idle) - memoria: ", processo_idle.frames_alocados.size() * Config::page_size, " palavras");
-
-    for (int i = 0; i < MAX_PROCESSOS; i++) {
-
-        if (tabela_processos[i].estado == EstadoProcesso::Livre)
-            continue; // pula vaga vazia
-
-        terminal_println(cpu, Terminal::Kernel,"pid ", tabela_processos[i].process_id," (", tabela_processos[i].nome_binario, ") - memoria: ",
-            tabela_processos[i].frames_alocados.size() * Config::page_size, " palavras");
+    terminal_println(cpu, Terminal::Kernel,"pid 0 (idle) - memoria: ",processo_idle.frames_alocados.size() * Config::page_size," palavras");
+    for (Process &proc : tabela_processos) {
+        terminal_println(cpu, Terminal::Kernel,"pid ", proc.process_id," (", proc.nome_binario,") - memoria: ",proc.frames_alocados.size() * Config::page_size," palavras");
     }
 }
 
 void matar_processo_atual() {
 
     if (processo_atual == &processo_idle) {
-        terminal_println(cpu, Terminal::Kernel,"ERRO CRITICO: tentativa de finalizar o processo idle!");
+    terminal_println(cpu, Terminal::Kernel,"ERRO: tentativa de matar o idle!");
         return;
     }
 
-    terminal_println(cpu,Terminal::Kernel,"processo ",processo_atual->process_id," (", processo_atual->nome_binario, ") morto, liberando ",
-    processo_atual->frames_alocados.size() * Config::page_size, " palavras de memoria");
+    Process *morto = processo_atual;
 
-    liberar_memoria_processo(processo_atual);
-    processo_atual->estado = EstadoProcesso::Livre;
+    terminal_println(cpu, Terminal::Kernel,"processo ", morto->process_id," finalizado");
+
+    liberar_memoria_processo(morto);
+
+    morto->estado = EstadoProcesso::Livre;
+
     trocar_processo(&processo_idle);
+
+    for (auto it = tabela_processos.begin();
+         it != tabela_processos.end(); ++it) {
+
+        if (&(*it) == morto) {
+            tabela_processos.erase(it);
+            break;
+        }
+    }
 }
 
-void carregar_programa(std::string nome) {
+Process *carregar_programa(std::string nome) {
 
     if (nome.empty()) {
         terminal_println(cpu, Terminal::Kernel,"ERRO: informe o nome do arquivo!");
-        return;
+        return nullptr;
     }
 
     std::string caminho = "archieves/" + nome;
@@ -61,20 +60,15 @@ void carregar_programa(std::string nome) {
 
     if (!arquivo.is_open()) {
         terminal_println( cpu,Terminal::Kernel,"ERRO: arquivo nao encontrado: ", nome);
-        return;
+        return nullptr;
     }
 
     arquivo.close();
 
    Process *novo = alocar_entrada_processo();
 
-    if (novo == nullptr) {
-    terminal_println(cpu, Terminal::Kernel, "ERRO: tabela de processos cheia!");
-    return;
-    }
-
     novo->process_id = proximo_pid++;
-    novo->image = Lib::load_from_disk_to_16bit_buffer(caminho);
+    auto image = Lib::load_from_disk_to_16bit_buffer(caminho);
     novo->nome_binario = nome;
     novo->estado = EstadoProcesso::Pronto;
 
@@ -82,43 +76,68 @@ void carregar_programa(std::string nome) {
     novo->gprs_salvos = {};
     novo->page_table = {};
 
-    carregar_processo_na_memoria(novo);
-    trocar_processo(novo);
-    
-    terminal_println(cpu, Terminal::Kernel, "processo ", novo->process_id, " (", novo->nome_binario, ") carregado, usando ",
-    novo->frames_alocados.size() * Config::page_size, " palavras de memoria");
-}
+   if (!carregar_processo_na_memoria(novo, image)) {
 
-void escalonar () {
-    int atual = -1;
+    for (auto it = tabela_processos.begin();
+         it != tabela_processos.end(); ++it) {
 
-    // onde o processo ta na tabela?
-    for (int i = 0; i < MAX_PROCESSOS; i++) {
-        if (&tabela_processos[i] == processo_atual)
-            atual = i;
-    }
-
-    // procura o proximo processo pronto
-    for (int passo = 1; passo <= MAX_PROCESSOS; passo++) {
-
-        int i = atual + passo;
-
-            //voltar pro inicio da tabela se chegar no final
-            if (i >= MAX_PROCESSOS) {
-                i = i - MAX_PROCESSOS;
-            }
-
-        if (tabela_processos[i].estado == EstadoProcesso::Pronto) {
-            trocar_processo(&tabela_processos[i]);
-            return;
+        if (&(*it) == novo) {
+            tabela_processos.erase(it);
+            break;
         }
     }
 
+    return nullptr;
+}
+
+trocar_processo(novo);
+    
+    terminal_println(cpu, Terminal::Kernel, "processo ", novo->process_id, " (", novo->nome_binario, ") carregado, usando ",
+    novo->frames_alocados.size() * Config::page_size, " palavras de memoria");
+
+    return novo;    
+}
+
+void escalonar() {
+
+    if (tabela_processos.empty())
+        return;
+
+    auto atual = tabela_processos.end();
+
+    for (auto it = tabela_processos.begin();
+         it != tabela_processos.end(); ++it) {
+
+        if (&(*it) == processo_atual) {
+            atual = it;
+            break;
+        }
+    }
+
+    auto proximo = atual;
+
+    if (proximo == tabela_processos.end())
+        proximo = tabela_processos.begin();
+    else
+        ++proximo;
+
+    for (size_t passo = 0;
+         passo < tabela_processos.size(); ++passo) {
+
+        if (proximo == tabela_processos.end())
+            proximo = tabela_processos.begin();
+
+        if (proximo->estado == EstadoProcesso::Pronto) {
+            trocar_processo(&(*proximo));
+            return;
+        }
+
+        ++proximo;
+    }
 }
 
 void trocar_processo(Process *processo) {
-    if (processo_atual != nullptr) {
-        
+    if (processo_atual != nullptr && processo_atual->estado == EstadoProcesso::Executando) {
         processo_atual->pc_salvo = cpu->get_pc();
         for (uint32_t i = 0; i < Config::nregs; i++)
             processo_atual->gprs_salvos[i] = cpu->get_gpr(i);

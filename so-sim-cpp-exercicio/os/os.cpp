@@ -24,16 +24,12 @@ Process *processo_atual;
 Arch::Cpu *cpu;
 Keyboard* meu_teclado;
 
-std::array<Process, MAX_PROCESSOS> tabela_processos;
+std::list<Process> tabela_processos;
 int proximo_pid = 1;
 
-Process *alocar_entrada_processo () {
-
-    for (int i = 0; i < MAX_PROCESSOS; i++) {
-        if (tabela_processos[i].estado == EstadoProcesso::Livre)
-            return &tabela_processos[i];
-    }
-    return nullptr;
+Process *alocar_entrada_processo() {
+    tabela_processos.emplace_back();
+    return &tabela_processos.back();
 }
 //-----------------------------~
 
@@ -42,14 +38,23 @@ void boot(Arch::Cpu *cpu)
 {
     OS::cpu = cpu;
 
-    // prepara o idle
+    //prepara o processo idle
     processo_idle.process_id = 0;
-    processo_idle.image = Lib::load_from_disk_to_16bit_buffer("archieves/idle.bin");
 
-    carregar_processo_na_memoria(&processo_idle);
+    auto image_idle =
+        Lib::load_from_disk_to_16bit_buffer("archieves/idle.bin");
+
+    //carrega o idle na memoria uma unica vez
+    if (!carregar_processo_na_memoria(&processo_idle, image_idle)) {
+        cpu->turn_off();
+        return;
+    }
+
+    //astiva a paginacao
     cpu->set_vmem_mode(VmemMode::Paging);
 
-	trocar_processo(&processo_idle);
+    //coloca o idle para executar
+    trocar_processo(&processo_idle);
 
     meu_teclado = new Keyboard(cpu);
 
@@ -57,7 +62,6 @@ void boot(Arch::Cpu *cpu)
     terminal_println(cpu, Terminal::App, "Apps output here");
     terminal_println(cpu, Terminal::Kernel, "Kernel output here");
 }
-
 void interrupt (InterruptCode interrupt_code)
 {
 	if (interrupt_code == InterruptCode::CpuException) {

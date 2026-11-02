@@ -1,6 +1,8 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
+#include <list>
+#include <string>
 #include <vector>
 #include <array>
 #include <cstdint>
@@ -13,12 +15,10 @@ enum class EstadoProcesso {
     Pronto,
     Executando
 };
-  constexpr int MAX_PROCESSOS = 4;
   
     struct Process {
     int process_id;
     Arch::Cpu::PageTable page_table;
-    std::vector<uint16_t> image;
 
     uint16_t pc_salvo = 1; // em qual instrução parou?
     std::array<uint16_t, Config::nregs> gprs_salvos{}; //estado da execucao do processo (oq tava rodando?)
@@ -30,27 +30,23 @@ enum class EstadoProcesso {
 
 };
 
-    namespace OS {
+   namespace OS {
 
     extern Process processo_idle;
     extern Process *processo_atual;
     extern Arch::Cpu *cpu;
 
-    extern std::array<Process, MAX_PROCESSOS> tabela_processos;
+    extern std::list<Process> tabela_processos;
     extern int proximo_pid;
 
     Process *alocar_entrada_processo();
+    Process *carregar_programa(std::string nome);
+
     void matar_processo_atual();
-    void carregar_programa(std::string nome);
     void trocar_processo(Process *processo);
     void listar_processos();
     void escalonar();
 
-    void matar_processo_atual();
-
-    void carregar_programa(std::string nome);
-
-    void trocar_processo(Process *processo);
     
     }
 

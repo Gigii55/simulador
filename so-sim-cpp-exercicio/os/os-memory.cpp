@@ -40,9 +40,9 @@ void pmm_liberar_frame(int frame) {
 }
 
 
-void carregar_processo_na_memoria (Process *proc){
+bool  carregar_processo_na_memoria (Process *proc, const std::vector<uint16_t>& image){
     
-	int tamanho_do_programa = proc->image.size();
+	int tamanho_do_programa = image.size();
 
 	int qtd_paginas = (tamanho_do_programa + Config::page_size - 1) >> Config::page_size_bits;
 
@@ -54,10 +54,15 @@ void carregar_processo_na_memoria (Process *proc){
 		int frame = pmm_alocar_frame();
 
 		if (frame == -1) {
-			terminal_println(cpu, Terminal::Kernel, "acabou a memoria fisica ao carregar o processo!");
-			cpu->turn_off();
-			return;
-		}
+			terminal_println(cpu, Terminal::Kernel,"ERRO: memoria fisica insuficiente!");
+
+    	liberar_memoria_processo(proc);
+
+    	proc->page_table = {};
+
+    return false;
+}
+}
 
 		proc->frames_alocados.push_back(frame);
 
@@ -70,7 +75,7 @@ void carregar_processo_na_memoria (Process *proc){
 
 				if (endereco_virtual_da_palavra < tamanho_do_programa) {
 
-					valor = proc->image[endereco_virtual_da_palavra];
+					valor = image[endereco_virtual_da_palavra];
 				}
 				else {
 					//preenche com 0 pra n deixar lixo na memoria
@@ -98,6 +103,8 @@ void carregar_processo_na_memoria (Process *proc){
 		pte.set(Arch::Cpu::PteField::Writable,1);
 		pte.set(Arch::Cpu::PteField::Executable,1);
 	}
+
+	return true;
 
 }
 

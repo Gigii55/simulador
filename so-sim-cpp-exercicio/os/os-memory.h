@@ -9,7 +9,8 @@ namespace OS {
 
 	void pmm_liberar_frame(int frame);
 
-	void carregar_processo_na_memoria(Process *proc);
+	bool carregar_processo_na_memoria(Process *proc,const std::vector<uint16_t>& image
+);
 	
 	void liberar_memoria_processo(Process *proc);
 
